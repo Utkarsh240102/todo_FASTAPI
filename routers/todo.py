@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends,status,HTTPException
+from fastapi import APIRouter, Depends,status,HTTPException,Path
 from pydantic import BaseModel,Field
 from typing import Annotated
 import models
@@ -25,16 +25,23 @@ db_dep=Annotated[Session,Depends(get_db)]
 user_dependency=Annotated[dict,Depends(get_current_user)]
 
 @routers.get('/')
-def list(db:db_dep):  #data injection
-    return db.query(todos).all()
+async def read_all(user: user_dependency, db: db_dep):
+    if user is None:
+        raise HTTPException(status_code=401, detail='Authentication Failed')
+    return db.query(todos).filter(todos.is_owned == user.get('id')).all()
+
 
 
 @routers.get('/todo/{id}',status_code=status.HTTP_200_OK)
-async def read(db:db_dep):
-    todo_model=db.query(todos).filter(todos.id ==id).first()
+async def read_todo(user: user_dependency, db: db_dep, todo_id: int = Path(gt=0)):
+    if user is None:
+        raise HTTPException(status_code=401, detail='Authentication Failed')
+
+    todo_model = db.query(todos).filter(todos.id == todo_id)\
+        .filter(todos.owner_id == user.get('id')).first()
     if todo_model is not None:
-        return  todo_model
-    raise HTTPException(status_code=404,detail="NOT found")
+        return todo_model
+    raise HTTPException(status_code=404, detail='Todo not found.')
 
 
 class TODO(BaseModel):
